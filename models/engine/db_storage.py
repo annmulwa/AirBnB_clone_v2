@@ -2,16 +2,18 @@
 """changing storage engine to use sqlalchemy
 """
 from os import getenv
-from sqlalchemy.orm import sessionmaker, scoped_session
-from sqlalchemy import (create_engine)
-from sqlalchemy.ext.declarative import declarative_base
 from models.base_model import Base
-from models.state import State
+from models.base_model import BaseModel
+from models.amenity import Amenity
 from models.city import City
-from models.user import User
 from models.place import Place
 from models.review import Review
-from models.amenity import Amenity
+from models.state import State
+from models.user import User
+from sqlalchemy import create_engine
+from sqlalchemy.orm import relationship
+from sqlalchemy.orm import scoped_session
+from sqlalchemy.orm import sessionmaker
 
 
 class DBStorage:
@@ -38,22 +40,18 @@ class DBStorage:
         Return:
             returns a dictionary of __object
         """
-        dic = {}
-        if cls:
-            if type(cls) is str:
-                cls = eval(cls)
-            query = self.__session.query(cls)
-            for elem in query:
-                key = "{}.{}".format(type(elem).__name__, elem.id)
-                dic[key] = elem
+        if cls is None:
+            objs = self.__session.query(State).all()
+            objs.extend(self.__session.query(City).all())
+            objs.extend(self.__session.query(User).all())
+            objs.extend(self.__session.query(Place).all())
+            objs.extend(self.__session.query(Review).all())
+            objs.extend(self.__session.query(Amenity).all())
         else:
-            lista = [State, City, User, Place, Review, Amenity]
-            for clase in lista:
-                query = self.__session.query(clase)
-                for elem in query:
-                    key = "{}.{}".format(type(elem).__name__, elem.id)
-                    dic[key] = elem
-        return (dic)
+            if type(cls) == str:
+                cls = eval(cls)
+            objs = self.__session.query(cls)
+        return {"{}.{}".format(type(o).__name__, o.id): o for o in objs}
 
     def new(self, obj):
         """add a new element in the table
@@ -68,15 +66,16 @@ class DBStorage:
     def delete(self, obj=None):
         """delete an element in the table
         """
-        if obj:
-            self.session.delete(obj)
+        if obj is not None:
+            self.__session.delete(obj)
 
     def reload(self):
         """configuration
         """
         Base.metadata.create_all(self.__engine)
-        sec = sessionmaker(bind=self.__engine, expire_on_commit=False)
-        Session = scoped_session(sec)
+        session_factory = sessionmaker(bind=self.__engine,
+                                       expire_on_commit=False)
+        Session = scoped_session(session_factory)
         self.__session = Session()
 
     def close(self):
